@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "PickleZone",
+    "slug": "pickle-zone",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./pickle-zone-logo.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./pickle-zone-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./pickle-zone-logo.png",
+        "backgroundColor": "#FFFFFF"
+      }
+    },
+    "web": {
+      "favicon": "./pickle-zone-logo.png"
+    }
+  }
+} 
