@@ -11,22 +11,76 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
+import { pickleZoneAPI } from '../services/pickleZoneAPI';
+import { cacheService } from '../services/cacheService';
 
-const InboxScreen = ({ user, onNavigate }) => {
+const InboxScreen = ({ user, onNavigate, onRefresh, lastRefresh }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
   const [loading, setLoading] = useState(false);
+  const [tournaments, setTournaments] = useState([]);
+  const [upcomingTournaments, setUpcomingTournaments] = useState([]);
+  const [dataFromCache, setDataFromCache] = useState(false);
 
   useEffect(() => {
     console.log('📸 InboxScreen loaded with user:', user);
     console.log('📸 Profile picture:', user?.profilePicture);
+    loadTournamentData();
   }, []);
 
-  const onRefresh = async () => {
+  const loadTournamentData = async () => {
+    try {
+      setLoading(true);
+      
+      // Load tournaments with caching
+      const tournamentsResult = await pickleZoneAPI.getTournaments();
+      if (tournamentsResult.success) {
+        setTournaments(tournamentsResult.data || []);
+        setDataFromCache(tournamentsResult.fromCache || false);
+        console.log('🏆 Tournaments loaded:', tournamentsResult.data?.length || 0, 'items');
+      }
+      
+      // Load upcoming tournaments with caching
+      const upcomingResult = await pickleZoneAPI.getUpcomingTournaments();
+      if (upcomingResult.success) {
+        setUpcomingTournaments(upcomingResult.data || []);
+        console.log('📅 Upcoming tournaments loaded:', upcomingResult.data?.length || 0, 'items');
+      }
+      
+    } catch (error) {
+      console.error('❌ Load tournament data error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onRefreshData = async () => {
     setRefreshing(true);
-    // Simulate refresh
-    setTimeout(() => setRefreshing(false), 1000);
+    try {
+      // Force refresh tournaments
+      const tournamentsResult = await pickleZoneAPI.getTournaments(true);
+      if (tournamentsResult.success) {
+        setTournaments(tournamentsResult.data || []);
+        setDataFromCache(false);
+      }
+      
+      const upcomingResult = await pickleZoneAPI.getUpcomingTournaments(true);
+      if (upcomingResult.success) {
+        setUpcomingTournaments(upcomingResult.data || []);
+      }
+      
+      // Call parent refresh if available
+      if (onRefresh) {
+        await onRefresh();
+      }
+      
+      console.log('✅ Data refreshed successfully');
+    } catch (error) {
+      console.error('❌ Refresh error:', error);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const handleSearch = (text) => {
@@ -80,6 +134,120 @@ const InboxScreen = ({ user, onNavigate }) => {
     return (user?.username?.charAt(0) || 'U').toUpperCase();
   };
 
+  const getTournamentMessages = () => {
+    const messages = [];
+    
+    // Add tournament messages
+    tournaments.slice(0, 3).forEach((tournament, index) => {
+      messages.push({
+        id: `tournament-${tournament.id || tournament._id || index}`,
+        type: 'tournament',
+        title: `Tournament: ${tournament.name}`,
+        message: `${tournament.name} is available for registration in ${tournament.city}`,
+        time: '2h ago',
+        unread: true
+      });
+    });
+    
+    // Add upcoming tournament messages
+    upcomingTournaments.slice(0, 2).forEach((tournament, index) => {
+      messages.push({
+        id: `upcoming-${tournament.id || tournament._id || index}`,
+        type: 'tournament',
+        title: `Upcoming: ${tournament.name}`,
+        message: `Don't miss ${tournament.name} starting soon!`,
+        time: '4h ago',
+        unread: false
+      });
+    });
+    
+    return messages;
+  };
+
+  const getFilteredMessages = () => {
+    const tournamentMessages = getTournamentMessages();
+    
+    const staticMessages = [
+      {
+        id: 'welcome',
+        type: 'system',
+        title: 'Welcome to PickleZone!',
+        message: 'Welcome to Malaysia Pickleball! You\'re all set up and ready to join tournaments.',
+        time: 'Just now',
+        unread: false
+      },
+      {
+        id: 'profile-active',
+        type: 'system',
+        title: 'Profile Active',
+        message: `Hi ${getUserDisplayName()}! Your profile is now active and ready for tournament participation.`,
+        time: '2h ago',
+        unread: false
+      }
+    ];
+    
+    let allMessages = [...staticMessages, ...tournamentMessages];
+    
+    // Filter by category
+    if (activeCategory === 'tournaments') {
+      allMessages = allMessages.filter(msg => msg.type === 'tournament');
+    } else if (activeCategory === 'system') {
+      allMessages = allMessages.filter(msg => msg.type === 'system');
+    }
+    
+    // Filter by search query
+    if (searchQuery.trim()) {
+      allMessages = allMessages.filter(msg => 
+        msg.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        msg.message?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+    
+    return allMessages;
+  };
+
+  const renderMessage = (message) => {
+    const getMessageIcon = (type) => {
+      switch (type) {
+        case 'tournament': return '🏆';
+        case 'system': return '🔔';
+        default: return '💬';
+      }
+    };
+
+    return (
+      <View key={message.id} style={styles.messageCard}>
+        <View style={styles.messageHeader}>
+          <View style={styles.messageIconContainer}>
+            <Text style={styles.messageIcon}>
+              {getMessageIcon(message.type)}
+            </Text>
+          </View>
+          <View style={styles.messageContent}>
+            <Text style={styles.messageTitle}>{message.title}</Text>
+            <Text style={styles.messageTime}>{message.time}</Text>
+          </View>
+          {message.unread && (
+            <View style={styles.unreadIndicator} />
+          )}
+        </View>
+        <Text style={styles.messageBody} numberOfLines={3}>
+          {message.message}
+        </Text>
+        {message.type === 'tournament' && (
+          <View style={styles.messageActions}>
+            <TouchableOpacity 
+              style={styles.messageActionButton}
+              onPress={handleTournamentsPress}
+            >
+              <Text style={styles.messageActionText}>View Details</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#007AFF" />
@@ -91,6 +259,9 @@ const InboxScreen = ({ user, onNavigate }) => {
             <Text style={styles.greetingText}>Welcome</Text>
             <Text style={styles.userNameText}>{getUserDisplayName()}</Text>
             <Text style={styles.headerSubtitle}>Ready to play some pickleball?</Text>
+            {dataFromCache && (
+              <Text style={styles.cacheIndicator}>📦 Using cached data</Text>
+            )}
           </View>
           <TouchableOpacity 
             style={styles.profileButton}
@@ -138,7 +309,7 @@ const InboxScreen = ({ user, onNavigate }) => {
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefreshData} />
         }
       >
         {/* Quick Actions */}
@@ -153,7 +324,9 @@ const InboxScreen = ({ user, onNavigate }) => {
                 <Text style={styles.quickActionIconText}>🏆</Text>
               </View>
               <Text style={styles.quickActionTitle}>Tournaments</Text>
-              <Text style={styles.quickActionSubtitle}>View upcoming events</Text>
+              <Text style={styles.quickActionSubtitle}>
+                {tournaments.length} available
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
@@ -169,49 +342,60 @@ const InboxScreen = ({ user, onNavigate }) => {
           </View>
         </View>
 
-        {/* Welcome Message */}
-        <View style={styles.messagesSection}>
+        {/* Message Categories */}
+        <View style={styles.categoriesSection}>
           <Text style={styles.sectionTitle}>Messages</Text>
-          
-          <View style={styles.messageCard}>
-            <View style={styles.messageHeader}>
-              <View style={styles.messageIconContainer}>
-                <Text style={styles.messageIcon}>🎉</Text>
-              </View>
-              <View style={styles.messageContent}>
-                <Text style={styles.messageTitle}>Welcome to PickleZone!</Text>
-                <Text style={styles.messageTime}>Just now</Text>
-              </View>
-            </View>
-            <Text style={styles.messageBody}>
-              Welcome to Malaysia Pickleball! You're all set up and ready to join tournaments, 
-              track your progress, and connect with the pickleball community.
-            </Text>
-            <View style={styles.messageActions}>
-              <TouchableOpacity 
-                style={styles.messageActionButton}
-                onPress={handleTournamentsPress}
-              >
-                <Text style={styles.messageActionText}>View Tournaments</Text>
-              </TouchableOpacity>
-            </View>
+          <View style={styles.categoriesContainer}>
+            <TouchableOpacity 
+              style={[styles.categoryButton, activeCategory === 'all' && styles.activeCategory]}
+              onPress={() => handleCategoryPress('all')}
+            >
+              <Text style={[styles.categoryText, activeCategory === 'all' && styles.activeCategoryText]}>
+                All
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.categoryButton, activeCategory === 'tournaments' && styles.activeCategory]}
+              onPress={() => handleCategoryPress('tournaments')}
+            >
+              <Text style={[styles.categoryText, activeCategory === 'tournaments' && styles.activeCategoryText]}>
+                Tournaments
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.categoryButton, activeCategory === 'system' && styles.activeCategory]}
+              onPress={() => handleCategoryPress('system')}
+            >
+              <Text style={[styles.categoryText, activeCategory === 'system' && styles.activeCategoryText]}>
+                System
+              </Text>
+            </TouchableOpacity>
           </View>
+        </View>
 
-          {/* Profile Status Message */}
-          <View style={styles.messageCard}>
-            <View style={styles.messageHeader}>
-              <View style={styles.messageIconContainer}>
-                <Text style={styles.messageIcon}>✅</Text>
-              </View>
-              <View style={styles.messageContent}>
-                <Text style={styles.messageTitle}>Profile Active</Text>
-                <Text style={styles.messageTime}>2h ago</Text>
-              </View>
+        {/* Messages List */}
+        <View style={styles.messagesSection}>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#007AFF" />
+              <Text style={styles.loadingText}>Loading messages...</Text>
             </View>
-            <Text style={styles.messageBody}>
-              Hi {getUserDisplayName()}! Your profile is now active and ready for tournament participation.
-            </Text>
-          </View>
+          ) : getFilteredMessages().length > 0 ? (
+            getFilteredMessages().map(renderMessage)
+          ) : (
+            <View style={styles.emptyStateCard}>
+              <Text style={styles.emptyStateIcon}>📬</Text>
+              <Text style={styles.emptyStateTitle}>
+                {searchQuery ? 'No matching messages found' : 'You\'re All Caught Up!'}
+              </Text>
+              <Text style={styles.emptyStateText}>
+                {searchQuery 
+                  ? 'Try adjusting your search terms or check different categories'
+                  : 'New tournament updates and messages will appear here'
+                }
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.bottomSpacing} />
@@ -260,6 +444,11 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.8)',
     fontSize: 14,
     fontWeight: '400',
+  },
+  cacheIndicator: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
+    marginTop: 2,
   },
   profileButton: {
     padding: 4,
@@ -378,8 +567,52 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
   },
+  categoriesSection: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  categoriesContainer: {
+    flexDirection: 'row',
+  },
+  categoryButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    marginRight: 8,
+  },
+  activeCategory: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  categoryText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
+  },
+  activeCategoryText: {
+    color: '#fff',
+  },
   messagesSection: {
     paddingHorizontal: 20,
+  },
+  loadingContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 40,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
   },
   messageCard: {
     backgroundColor: '#fff',
@@ -442,6 +675,41 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',
+  },
+  unreadIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#007AFF',
+    marginLeft: 8,
+  },
+  emptyStateCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 40,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  emptyStateIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 20,
   },
   bottomSpacing: {
     height: 20,

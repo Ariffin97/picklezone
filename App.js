@@ -6,6 +6,7 @@ import InboxScreen from './screens/InboxScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import TournamentHistoryScreen from './screens/TournamentHistoryScreen';
 import { pickleZoneAPI } from './services/pickleZoneAPI';
+import { cacheService } from './services/cacheService';
 
 // Bottom Navigation Component
 const BottomNavigation = ({ currentScreen, onNavigate }) => {
@@ -49,20 +50,64 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [currentScreen, setCurrentScreen] = useState('inbox');
   const [isLoading, setIsLoading] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState(null);
 
   useEffect(() => {
-    // Check if user is already logged in (from stored token)
+    // Check if user is already logged in (from cached session)
     checkAuthStatus();
   }, []);
 
   const checkAuthStatus = async () => {
     try {
-      // You could implement token validation here
-      // For now, we'll just set loading to false
-      setIsLoading(false);
+      console.log('🔍 Checking authentication status...');
+      
+      // Try to restore session from cache
+      const cachedSession = await cacheService.getUserSession();
+      
+      if (cachedSession && cachedSession.user) {
+        console.log('✅ Found cached session:', cachedSession.user.username);
+        
+        // Restore user data and login state
+        setUser(cachedSession.user);
+        setIsLoggedIn(true);
+        
+        // Set tokens in API service
+        if (cachedSession.tokens) {
+          pickleZoneAPI.token = cachedSession.tokens.accessToken;
+          pickleZoneAPI.refreshToken = cachedSession.tokens.refreshToken;
+        }
+        
+        console.log('🔑 Session restored from cache');
+        
+        // Check if we need to refresh data in background
+        checkDataRefresh();
+      } else {
+        console.log('❌ No cached session found');
+      }
     } catch (error) {
-      console.error('Auth check error:', error);
+      console.error('❌ Auth check error:', error);
+    } finally {
       setIsLoading(false);
+    }
+  };
+
+  const checkDataRefresh = async () => {
+    try {
+      const refreshNeeds = await pickleZoneAPI.needsDataRefresh();
+      const needsAnyRefresh = Object.values(refreshNeeds).some(needs => needs);
+      
+      if (needsAnyRefresh) {
+        console.log('🔄 Background data refresh needed:', refreshNeeds);
+        // Refresh data in background without blocking UI
+        pickleZoneAPI.refreshAllData().then(() => {
+          setLastRefresh(new Date());
+          console.log('✅ Background refresh completed');
+        });
+      } else {
+        console.log('✅ All data is fresh, no refresh needed');
+      }
+    } catch (error) {
+      console.error('❌ Data refresh check error:', error);
     }
   };
 
@@ -86,45 +131,74 @@ export default function App() {
       pickleZoneAPI.token = accessToken;
       console.log('Access token stored in API service');
     }
+    
+    // Session is already cached by the API service during login
+    console.log('💾 User session cached during login');
   };
 
-  const handleLogout = () => {
-    setUser(null);
-    setIsLoggedIn(false);
-    setCurrentScreen('inbox');
+  const handleLogout = async () => {
+    try {
+      console.log('🚪 Logging out...');
+      
+      // Clear API tokens and cache
+      await pickleZoneAPI.logout();
+      
+      // Clear local state
+      setUser(null);
+      setIsLoggedIn(false);
+      setCurrentScreen('inbox');
+      setLastRefresh(null);
+      
+      console.log('✅ Logout completed');
+    } catch (error) {
+      console.error('❌ Logout error:', error);
+      // Force logout even if there's an error
+      setUser(null);
+      setIsLoggedIn(false);
+      setCurrentScreen('inbox');
+    }
   };
 
   const handleNavigation = (screen) => {
     setCurrentScreen(screen);
   };
 
+  const handleRefresh = async () => {
+    try {
+      console.log('🔄 Manual refresh triggered');
+      await pickleZoneAPI.refreshAllData();
+      setLastRefresh(new Date());
+      console.log('✅ Manual refresh completed');
+    } catch (error) {
+      console.error('❌ Manual refresh error:', error);
+    }
+  };
+
   const renderCurrentScreen = () => {
+    const screenProps = {
+      user,
+      onNavigate: handleNavigation,
+      currentScreen,
+      onRefresh: handleRefresh,
+      lastRefresh
+    };
+
     switch (currentScreen) {
       case 'profile':
         return (
           <ProfileScreen 
-            user={user}
+            {...screenProps}
             onLogout={handleLogout}
-            onNavigate={handleNavigation}
-            currentScreen={currentScreen}
           />
         );
       case 'tournaments':
         return (
-          <TournamentHistoryScreen 
-            user={user}
-            onNavigate={handleNavigation}
-            currentScreen={currentScreen}
-          />
+          <TournamentHistoryScreen {...screenProps} />
         );
       case 'inbox':
       default:
         return (
-          <InboxScreen 
-            user={user}
-            onNavigate={handleNavigation}
-            currentScreen={currentScreen}
-          />
+          <InboxScreen {...screenProps} />
         );
     }
   };
@@ -134,6 +208,7 @@ export default function App() {
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#007AFF" />
         <Text style={styles.loadingText}>Loading PickleZone...</Text>
+        <Text style={styles.loadingSubtext}>Checking saved session...</Text>
       </View>
     );
   }
@@ -157,6 +232,15 @@ export default function App() {
         onNavigate={handleNavigation}
       />
       <StatusBar style="auto" />
+      
+      {/* Debug info in development */}
+      {__DEV__ && lastRefresh && (
+        <View style={styles.debugInfo}>
+          <Text style={styles.debugText}>
+            Last refresh: {lastRefresh.toLocaleTimeString()}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -179,6 +263,12 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
     color: '#666',
+    fontWeight: '600',
+  },
+  loadingSubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#999',
   },
   bottomNav: {
     flexDirection: 'row',
@@ -200,15 +290,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   activeNavItem: {
-    // Active item styling handled by text colors
+    // Active nav item styling can be added here
   },
   navIcon: {
-    fontSize: 20,
+    fontSize: 24,
     marginBottom: 4,
-    opacity: 0.6,
   },
   activeNavIcon: {
-    opacity: 1,
+    // Active icon styling
   },
   navLabel: {
     fontSize: 12,
@@ -218,5 +307,17 @@ const styles = StyleSheet.create({
   activeNavLabel: {
     color: '#007AFF',
     fontWeight: '600',
+  },
+  debugInfo: {
+    position: 'absolute',
+    bottom: 80,
+    right: 10,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    padding: 8,
+    borderRadius: 4,
+  },
+  debugText: {
+    color: '#fff',
+    fontSize: 10,
   },
 }); 

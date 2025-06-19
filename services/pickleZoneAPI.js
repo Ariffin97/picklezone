@@ -1,10 +1,29 @@
 // PickleZone API Service - Malaysia Pickleball Integration
+import { cacheService } from './cacheService';
+
 const API_BASE_URL = 'https://www.malaysiapickleball.my/api';
 
 class PickleZoneAPI {
   constructor() {
     this.baseURL = API_BASE_URL;
     this.token = null;
+    this.refreshToken = null;
+    
+    // Load cached session on initialization
+    this.initializeFromCache();
+  }
+
+  async initializeFromCache() {
+    try {
+      const session = await cacheService.getUserSession();
+      if (session && session.tokens) {
+        this.token = session.tokens.accessToken;
+        this.refreshToken = session.tokens.refreshToken;
+        console.log('🔑 Restored session from cache');
+      }
+    } catch (error) {
+      console.error('❌ Failed to restore session from cache:', error);
+    }
   }
 
   // Helper method to make API requests
@@ -54,113 +73,112 @@ class PickleZoneAPI {
   }
 
   // Authentication Methods
-  async login(credentials) {
+  async login(username, password) {
     try {
-      const response = await this.makeRequest('/auth/player/login', {
+      console.log('🌐 Making request to:', `${this.baseURL}/auth/player/login`);
+      console.log('📤 Request config:', {
         method: 'POST',
-        body: JSON.stringify(credentials),
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include'
       });
 
-      if (response.success && response.data) {
-        // Extract user data from the response
-        const userData = response.data.player || response.data.user || response.data;
+      const response = await fetch(`${this.baseURL}/auth/player/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ username, password }),
+      });
+
+      console.log('📥 Response status:', response.status, response.statusText);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.log('❌ Error response:', errorText);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Login response:', data);
+
+      if (data.success && data.data) {
+        // Store tokens
+        this.token = data.data.tokens?.accessToken;
+        this.refreshToken = data.data.tokens?.refreshToken;
         
-        // Look for token in various possible locations
-        const token = response.data.token || 
-                     response.data.accessToken || 
-                     response.data.authToken ||
-                     response.data.jwt ||
-                     userData.token ||
-                     userData.accessToken;
+        // Cache user session
+        await cacheService.saveUserSession(data.data.player, data.data.tokens);
         
-        if (token) {
-          this.token = token;
-          console.log('Authentication token stored successfully');
-        } else {
-          console.log('No token found in response, but login successful');
-          // Some APIs don't return tokens but use session-based auth
-        }
+        // Cache user profile
+        await cacheService.saveUserProfile(data.data.player);
+        
+        console.log('💾 User session and profile cached');
         
         return {
           success: true,
-          user: userData,
-          token: token,
-          message: response.data.message || 'Login successful',
-        };
-      } else {
-        return {
-          success: false,
-          message: response.message || 'Login failed. Please check your credentials.',
+          data: data.data
         };
       }
+
+      return { success: false, message: data.message || 'Login failed' };
     } catch (error) {
-      console.error('Login error:', error);
-      return {
-        success: false,
-        message: 'Unable to connect to server. Please check your internet connection and try again.',
-      };
+      console.error('❌ Login error:', error);
+      return { success: false, message: error.message };
     }
   }
 
   // Tournament Methods
-  async getTournaments() {
-    try {
-      const response = await this.makeRequest('/tournaments');
-      
-      if (response.success) {
-        // Handle nested data structure: response.data.data.tournaments
-        const tournaments = response.data?.data?.tournaments || 
-                          response.data?.tournaments || 
-                          response.data || 
-                          [];
-        
-        console.log('Extracted tournaments:', tournaments);
-        
-        return {
-          success: true,
-          tournaments: Array.isArray(tournaments) ? tournaments : [],
-        };
-      }
-      
-      return {
-        success: false,
-        message: 'Failed to fetch tournaments',
-        tournaments: [],
-      };
-    } catch (error) {
-      console.error('Get tournaments error:', error);
-      return {
-        success: false,
-        message: 'Unable to fetch tournaments. Please try again.',
-        tournaments: [],
-      };
-    }
+  async getTournaments(forceRefresh = false) {
+    return await cacheService.getOrFetch(
+      cacheService.CACHE_KEYS.TOURNAMENTS,
+      async () => {
+        try {
+          const response = await fetch(`${this.baseURL}/tournaments`);
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          const data = await response.json();
+          
+          await cacheService.updateLastSync('tournaments');
+          
+          return {
+            success: true,
+            data: data.tournaments || data
+          };
+        } catch (error) {
+          console.error('❌ Tournaments fetch error:', error);
+          return { success: false, message: error.message };
+        }
+      },
+      forceRefresh
+    );
   }
 
-  async getUpcomingTournaments() {
-    try {
-      const response = await this.makeRequest('/tournaments/upcoming');
-      
-      if (response.success) {
-        return {
-          success: true,
-          tournaments: response.data.tournaments || response.data || [],
-        };
-      }
-      
-      return {
-        success: false,
-        message: 'Failed to fetch upcoming tournaments',
-        tournaments: [],
-      };
-    } catch (error) {
-      console.error('Get upcoming tournaments error:', error);
-      return {
-        success: false,
-        message: 'Unable to fetch upcoming tournaments. Please try again.',
-        tournaments: [],
-      };
-    }
+  async getUpcomingTournaments(forceRefresh = false) {
+    return await cacheService.getOrFetch(
+      cacheService.CACHE_KEYS.UPCOMING_TOURNAMENTS,
+      async () => {
+        try {
+          const response = await fetch(`${this.baseURL}/tournaments/upcoming`);
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          const data = await response.json();
+          
+          await cacheService.updateLastSync('upcoming_tournaments');
+          
+          return {
+            success: true,
+            data: data.tournaments || data
+          };
+        } catch (error) {
+          console.error('❌ Upcoming tournaments fetch error:', error);
+          return { success: false, message: error.message };
+        }
+      },
+      forceRefresh
+    );
   }
 
   async getTournamentDetails(tournamentId) {
@@ -177,27 +195,47 @@ class PickleZoneAPI {
   }
 
   // Player Methods
-  async getPlayerProfile() {
-    try {
-      const response = await this.makeRequest('/player/profile');
-      
-      if (response.success) {
-        return {
-          success: true,
-          player: response.data.player || response.data,
-        };
+  async getPlayerProfile(forceRefresh = false) {
+    // First try to get from cache
+    if (!forceRefresh) {
+      const cachedProfile = await cacheService.getUserProfile();
+      if (cachedProfile) {
+        console.log('📦 Using cached profile data');
+        return { success: true, player: cachedProfile, fromCache: true };
       }
+    }
+
+    // If no cache or force refresh, try API
+    try {
+      if (!this.token) {
+        console.log('❌ No authentication token available');
+        return { success: false, message: 'Authentication required' };
+      }
+
+      const response = await fetch(`${this.baseURL}/player/profile`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
       
-      return {
-        success: false,
-        message: 'Failed to fetch player profile',
-      };
+      if (data.success && data.player) {
+        // Cache the fresh profile data
+        await cacheService.saveUserProfile(data.player);
+        return { success: true, player: data.player, fromCache: false };
+      }
+
+      return { success: false, message: data.message || 'Profile fetch failed' };
     } catch (error) {
-      console.error('Get player profile error:', error);
-      return {
-        success: false,
-        message: 'Failed to fetch player profile',
-      };
+      console.error('❌ Profile fetch error:', error);
+      return { success: false, message: error.message };
     }
   }
 
@@ -229,28 +267,14 @@ class PickleZoneAPI {
     }
   }
 
-  async getMobilePlayerEssential() {
-    try {
-      const response = await this.makeRequest('/mobile/player/essential');
-      
-      if (response.success) {
-        return {
-          success: true,
-          player: response.data.player || response.data,
-        };
-      }
-      
-      return {
-        success: false,
-        message: 'Failed to fetch mobile player data',
-      };
-    } catch (error) {
-      console.error('Get mobile player essential error:', error);
-      return {
-        success: false,
-        message: 'Failed to fetch mobile player data',
-      };
+  async getMobilePlayerEssential(forceRefresh = false) {
+    // Use cached profile as fallback for mobile essential
+    const profileResult = await this.getPlayerProfile(forceRefresh);
+    if (profileResult.success) {
+      return { success: true, player: profileResult.player, fromCache: profileResult.fromCache };
     }
+    
+    return { success: false, message: 'Player data not available' };
   }
 
   // Utility Methods
@@ -283,15 +307,19 @@ class PickleZoneAPI {
   // Logout method
   async logout() {
     try {
-      if (this.token) {
-        await this.makeRequest('/auth/logout', {
-          method: 'POST',
-        });
-      }
-    } catch (error) {
-      console.error('Logout error:', error);
-    } finally {
+      // Clear tokens
       this.token = null;
+      this.refreshToken = null;
+      
+      // Clear cached data
+      await cacheService.clearUserSession();
+      await cacheService.removeCache(cacheService.CACHE_KEYS.USER_PROFILE);
+      
+      console.log('🚪 Logout completed, cache cleared');
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Logout error:', error);
+      return { success: false, message: error.message };
     }
   }
 
@@ -516,6 +544,42 @@ class PickleZoneAPI {
         message: 'Failed to fetch player registration data',
       };
     }
+  }
+
+  // Check if data needs refresh
+  async needsDataRefresh() {
+    const checks = {
+      tournaments: await cacheService.needsRefresh('tournaments', 60 * 60 * 1000), // 1 hour
+      upcomingTournaments: await cacheService.needsRefresh('upcoming_tournaments', 30 * 60 * 1000), // 30 min
+      profile: await cacheService.needsRefresh('profile', 24 * 60 * 60 * 1000), // 24 hours
+    };
+    
+    return checks;
+  }
+
+  // Force refresh all data
+  async refreshAllData() {
+    console.log('🔄 Force refreshing all data...');
+    
+    const results = await Promise.allSettled([
+      this.getTournaments(true),
+      this.getUpcomingTournaments(true),
+      this.getPlayerProfile(true)
+    ]);
+    
+    const summary = {
+      tournaments: results[0].status === 'fulfilled' && results[0].value.success,
+      upcomingTournaments: results[1].status === 'fulfilled' && results[1].value.success,
+      profile: results[2].status === 'fulfilled' && results[2].value.success
+    };
+    
+    console.log('🔄 Refresh summary:', summary);
+    return summary;
+  }
+
+  // Get cache statistics
+  async getCacheInfo() {
+    return await cacheService.getCacheStats();
   }
 }
 

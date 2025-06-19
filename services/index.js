@@ -1,7 +1,9 @@
 // Export all services from a single entry point
-export { apiClient, API_CONFIG, STORAGE_KEYS } from './api';
 export { pickleZoneAPI } from './pickleZoneAPI';
-export { gameService } from './gameService';
+export { cacheService } from './cacheService';
+export { default as authService } from './authService';
+export { default as gameService } from './gameService';
+export { default as api } from './api';
 
 // Re-export commonly used functions for convenience
 export const {
