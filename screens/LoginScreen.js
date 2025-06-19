@@ -9,20 +9,46 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
+import { pickleZoneAPI } from '../services/pickleZoneAPI';
 
 const LoginScreen = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
+    if (!username.trim() || !password.trim()) {
+      Alert.alert('Error', 'Please enter both username and password');
+      return;
+    }
+
     setIsLoading(true);
-    // Simulate login process
-    setTimeout(() => {
+    setError('');
+
+    try {
+      const result = await pickleZoneAPI.login({ 
+        username: username.trim(), 
+        password: password.trim() 
+      });
+
+      if (result.success) {
+        // Login successful
+        onLogin(result.user);
+      } else {
+        // Login failed
+        setError(result.message);
+        Alert.alert('Login Failed', result.message);
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      setError('An unexpected error occurred. Please try again.');
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+    } finally {
       setIsLoading(false);
-      onLogin(); // Call the function to proceed to main app
-    }, 1000);
+    }
   };
 
   return (
@@ -39,9 +65,16 @@ const LoginScreen = ({ onLogin }) => {
               style={styles.logo}
               resizeMode="contain"
             />
-            <Text style={styles.welcomeText}>Welcome Back!</Text>
-            <Text style={styles.subtitleText}>Sign in to your account</Text>
+            <Text style={styles.welcomeText}>Welcome to PickleZone!</Text>
+            <Text style={styles.subtitleText}>Sign in to your Malaysia Pickleball account</Text>
           </View>
+
+          {/* Error Message */}
+          {error ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
 
           {/* Login Form */}
           <View style={styles.formContainer}>
@@ -56,6 +89,7 @@ const LoginScreen = ({ onLogin }) => {
                 onChangeText={setUsername}
                 autoCapitalize="none"
                 autoCorrect={false}
+                editable={!isLoading}
               />
             </View>
 
@@ -71,11 +105,15 @@ const LoginScreen = ({ onLogin }) => {
                 secureTextEntry={true}
                 autoCapitalize="none"
                 autoCorrect={false}
+                editable={!isLoading}
               />
             </View>
 
             {/* Forgot Password */}
-            <TouchableOpacity style={styles.forgotPasswordContainer}>
+            <TouchableOpacity 
+              style={styles.forgotPasswordContainer}
+              disabled={isLoading}
+            >
               <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
             </TouchableOpacity>
 
@@ -91,11 +129,23 @@ const LoginScreen = ({ onLogin }) => {
             </TouchableOpacity>
           </View>
 
+          {/* API Info */}
+          <View style={styles.apiInfoContainer}>
+            <Text style={styles.apiInfoText}>
+              🌐 Connected to Malaysia Pickleball API
+            </Text>
+            <Text style={styles.apiUrlText}>
+              www.malaysiapickleball.my
+            </Text>
+          </View>
+
           {/* Sign Up Section */}
           <View style={styles.signupContainer}>
             <Text style={styles.signupText}>Don't have an account? </Text>
-            <TouchableOpacity>
-              <Text style={styles.signupLink}>Sign Up</Text>
+            <TouchableOpacity disabled={isLoading}>
+              <Text style={[styles.signupLink, isLoading && styles.signupLinkDisabled]}>
+                Sign Up
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -132,10 +182,25 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
     marginBottom: 8,
+    textAlign: 'center',
   },
   subtitleText: {
     fontSize: 16,
     color: '#666',
+    textAlign: 'center',
+  },
+  errorContainer: {
+    backgroundColor: '#ffebee',
+    borderColor: '#f44336',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 20,
+  },
+  errorText: {
+    color: '#d32f2f',
+    fontSize: 14,
+    textAlign: 'center',
   },
   formContainer: {
     marginBottom: 32,
@@ -182,6 +247,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  apiInfoContainer: {
+    backgroundColor: '#e8f5e8',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  apiInfoText: {
+    fontSize: 14,
+    color: '#2e7d32',
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  apiUrlText: {
+    fontSize: 12,
+    color: '#388e3c',
+  },
   signupContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -195,6 +277,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#007AFF',
     fontWeight: '600',
+  },
+  signupLinkDisabled: {
+    color: '#ccc',
   },
 });
 

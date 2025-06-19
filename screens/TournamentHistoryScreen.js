@@ -1,85 +1,169 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  StatusBar,
+  RefreshControl,
 } from 'react-native';
 
-const TournamentHistoryScreen = () => {
+const TournamentHistoryScreen = ({ user, onNavigate }) => {
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeFilter, setActiveFilter] = useState('all');
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    // Simulate API call
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 1000);
+  };
+
+  const handleFilterPress = (filter) => {
+    setActiveFilter(filter);
+  };
+
+  const handleExplorePress = () => {
+    // Could navigate to a tournaments discovery page
+    if (onNavigate) {
+      onNavigate('inbox'); // For now, go back to home
+    }
+  };
+
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView}>
-        <View style={styles.content}>
-          {/* Statistics Summary */}
+      <StatusBar barStyle="light-content" backgroundColor="#007AFF" />
+      
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerContent}>
+          <Text style={styles.headerTitle}>Tournaments</Text>
+          <View style={styles.headerSubtitle}>
+            <Text style={styles.headerSubtitleText}>Track your progress</Text>
+          </View>
+        </View>
+      </View>
+
+      <ScrollView 
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {/* Statistics Summary */}
+        <View style={styles.statsSection}>
+          <Text style={styles.sectionTitle}>Your Stats</Text>
           <View style={styles.statsContainer}>
-            <View style={styles.statItem}>
+            <View style={styles.statCard}>
               <Text style={styles.statNumber}>0</Text>
               <Text style={styles.statLabel}>Completed</Text>
             </View>
-            <View style={styles.statItem}>
+            <View style={styles.statCard}>
               <Text style={styles.statNumber}>0</Text>
               <Text style={styles.statLabel}>Ongoing</Text>
             </View>
-            <View style={styles.statItem}>
+            <View style={styles.statCard}>
               <Text style={styles.statNumber}>0</Text>
               <Text style={styles.statLabel}>Registered</Text>
             </View>
           </View>
+        </View>
 
-          {/* Filter Options */}
-          <View style={styles.filtersContainer}>
-            <Text style={styles.filtersTitle}>Filter by Status</Text>
-            <View style={styles.filterButtons}>
-              <TouchableOpacity style={[styles.filterButton, styles.activeFilter]}>
-                <Text style={[styles.filterText, styles.activeFilterText]}>All</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.filterButton}>
-                <Text style={styles.filterText}>Completed</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.filterButton}>
-                <Text style={styles.filterText}>Ongoing</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.filterButton}>
-                <Text style={styles.filterText}>Upcoming</Text>
-              </TouchableOpacity>
-            </View>
+        {/* Filter Options */}
+        <View style={styles.filtersSection}>
+          <Text style={styles.sectionTitle}>Filter by Status</Text>
+          <View style={styles.filterButtons}>
+            <TouchableOpacity 
+              style={[styles.filterButton, activeFilter === 'all' && styles.activeFilter]}
+              onPress={() => handleFilterPress('all')}
+            >
+              <Text style={[styles.filterText, activeFilter === 'all' && styles.activeFilterText]}>
+                All
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.filterButton, activeFilter === 'completed' && styles.activeFilter]}
+              onPress={() => handleFilterPress('completed')}
+            >
+              <Text style={[styles.filterText, activeFilter === 'completed' && styles.activeFilterText]}>
+                Completed
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.filterButton, activeFilter === 'ongoing' && styles.activeFilter]}
+              onPress={() => handleFilterPress('ongoing')}
+            >
+              <Text style={[styles.filterText, activeFilter === 'ongoing' && styles.activeFilterText]}>
+                Ongoing
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.filterButton, activeFilter === 'upcoming' && styles.activeFilter]}
+              onPress={() => handleFilterPress('upcoming')}
+            >
+              <Text style={[styles.filterText, activeFilter === 'upcoming' && styles.activeFilterText]}>
+                Upcoming
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Tournament History */}
+        <View style={styles.historySection}>
+          <Text style={styles.sectionTitle}>Tournament History</Text>
+          
+          {/* Empty State */}
+          <View style={styles.emptyStateCard}>
+            <Text style={styles.emptyStateIcon}>🏆</Text>
+            <Text style={styles.emptyStateTitle}>No Tournament History Yet</Text>
+            <Text style={styles.emptyStateText}>
+              Your tournament participation history will appear here once you register for events. 
+              Start your pickleball journey today!
+            </Text>
+            <TouchableOpacity 
+              style={styles.exploreButton}
+              onPress={handleExplorePress}
+            >
+              <Text style={styles.exploreButtonText}>🔍 Explore Tournaments</Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Tournament History List */}
-          <View style={styles.historySection}>
-            <Text style={styles.sectionTitle}>Tournament History</Text>
-            
-            {/* Empty State */}
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateTitle}>No Tournament History</Text>
-              <Text style={styles.emptyStateText}>
-                Your tournament participation history will appear here once you register for events
-              </Text>
-              <TouchableOpacity style={styles.exploreButton}>
-                <Text style={styles.exploreButtonText}>Explore Tournaments</Text>
-              </TouchableOpacity>
+          {/* Sample Tournament Card - for demonstration */}
+          <View style={styles.tournamentCard}>
+            <View style={styles.tournamentHeader}>
+              <View style={styles.tournamentInfo}>
+                <Text style={styles.tournamentName}>Sample Tournament</Text>
+                <Text style={styles.tournamentDate}>Coming Soon</Text>
+              </View>
+              <View style={styles.statusBadge}>
+                <Text style={styles.statusText}>Ready</Text>
+              </View>
             </View>
-
-            {/* Placeholder for future tournaments */}
-            <View style={styles.historyPlaceholder}>
-              <View style={styles.tournamentHistoryItem}>
-                <View style={styles.tournamentHeader}>
-                  <Text style={styles.tournamentName}>Sample Tournament</Text>
-                  <View style={styles.statusBadge}>
-                    <Text style={styles.statusText}>Ready</Text>
-                  </View>
-                </View>
-                <Text style={styles.tournamentDate}>Tournament records will show here</Text>
-                <View style={styles.tournamentDetails}>
-                  <Text style={styles.detailText}>Position: Coming soon</Text>
-                  <Text style={styles.detailText}>Points: Coming soon</Text>
-                </View>
+            <Text style={styles.tournamentDescription}>
+              Tournament records and results will appear here when you participate in events.
+            </Text>
+            <View style={styles.tournamentDetails}>
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Position</Text>
+                <Text style={styles.detailValue}>-</Text>
+              </View>
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Points</Text>
+                <Text style={styles.detailValue}>-</Text>
+              </View>
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Date</Text>
+                <Text style={styles.detailValue}>TBD</Text>
               </View>
             </View>
           </View>
         </View>
+
+        {/* Bottom Spacing */}
+        <View style={styles.bottomSpacing} />
       </ScrollView>
     </View>
   );
@@ -88,47 +172,78 @@ const TournamentHistoryScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f8f9fa',
+  },
+  header: {
+    backgroundColor: '#007AFF',
+    paddingTop: 50,
+    paddingBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  headerContent: {
+    paddingHorizontal: 20,
+  },
+  headerTitle: {
+    color: '#fff',
+    fontSize: 28,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  headerSubtitle: {
+    opacity: 0.9,
+  },
+  headerSubtitleText: {
+    color: '#fff',
+    fontSize: 16,
   },
   scrollView: {
     flex: 1,
   },
-  content: {
-    flex: 1,
-    padding: 16,
+  statsSection: {
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    marginBottom: 16,
   },
   statsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#f8f9fa',
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 20,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  statItem: {
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
   },
   statNumber: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#007AFF',
     marginBottom: 4,
   },
   statLabel: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#666',
     fontWeight: '500',
+    textAlign: 'center',
   },
-  filtersContainer: {
-    marginBottom: 24,
-  },
-  filtersTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
+  filtersSection: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
   },
   filterButtons: {
     flexDirection: 'row',
@@ -139,7 +254,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#e0e0e0',
   },
@@ -156,23 +271,28 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   historySection: {
-    flex: 1,
+    paddingHorizontal: 20,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 16,
-  },
-  emptyState: {
+  emptyStateCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 40,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  emptyStateIcon: {
+    fontSize: 48,
+    marginBottom: 16,
   },
   emptyStateTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '600',
+    color: '#1a1a1a',
     marginBottom: 8,
   },
   emptyStateText: {
@@ -180,40 +300,48 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     lineHeight: 20,
-    marginBottom: 20,
+    marginBottom: 24,
   },
   exploreButton: {
     backgroundColor: '#007AFF',
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 25,
+    borderRadius: 24,
   },
   exploreButtonText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
   },
-  historyPlaceholder: {
-    marginTop: 20,
-  },
-  tournamentHistoryItem: {
-    backgroundColor: '#f8f9fa',
+  tournamentCard: {
+    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
   },
   tournamentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  tournamentInfo: {
+    flex: 1,
   },
   tournamentName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: '#1a1a1a',
+    marginBottom: 4,
+  },
+  tournamentDate: {
+    fontSize: 14,
+    color: '#666',
   },
   statusBadge: {
     backgroundColor: '#e8f5e8',
@@ -223,22 +351,34 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#4caf50',
+    color: '#4a9b4a',
+    fontWeight: '500',
   },
-  tournamentDate: {
+  tournamentDescription: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 12,
+    lineHeight: 20,
+    marginBottom: 16,
   },
   tournamentDetails: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  detailText: {
+  detailItem: {
+    alignItems: 'center',
+  },
+  detailLabel: {
     fontSize: 12,
     color: '#999',
-    fontStyle: 'italic',
+    marginBottom: 4,
+  },
+  detailValue: {
+    fontSize: 14,
+    color: '#1a1a1a',
+    fontWeight: '500',
+  },
+  bottomSpacing: {
+    height: 40,
   },
 });
 
