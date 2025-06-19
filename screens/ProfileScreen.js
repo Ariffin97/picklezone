@@ -21,22 +21,114 @@ const ProfileScreen = ({ onLogout, user, onNavigate }) => {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    if (user) {
-      setUserProfile(user);
+    console.log('=== ProfileScreen mounted ===');
+    console.log('User prop received:', user);
+    
+    // Extract the actual player data from nested structure if needed
+    let playerData = user;
+    if (user?.data?.player) {
+      playerData = user.data.player;
+      console.log('Extracted player data from nested structure:', playerData);
+    }
+    
+    if (playerData) {
+      setUserProfile(playerData);
+      console.log('Set userProfile to clean player data:', playerData);
     } else {
       loadUserData();
     }
   }, [user]);
 
+  useEffect(() => {
+    console.log('=== ProfileScreen: userProfile state changed ===');
+    console.log('Current userProfile:', userProfile);
+  }, [userProfile]);
+
   const loadUserData = async () => {
     setIsLoading(true);
     try {
+      console.log('=== ProfileScreen: Comprehensive search for IC number and Phone number ===');
+      
+      // Test multiple endpoints to find IC number and phone number
+      const endpoints = [
+        { name: 'Mobile Player Essential', method: 'getMobilePlayerEssential' },
+        { name: 'Player Profile', method: 'getPlayerProfile' },
+        { name: 'Player Details', method: 'getPlayerDetails' },
+        { name: 'Player Info', method: 'getPlayerInfo' },
+        { name: 'Player Personal', method: 'getPlayerPersonal' },
+        { name: 'Player Registration', method: 'getPlayerRegistration' }
+      ];
+
+      let foundICNumber = false;
+      let foundPhoneNumber = false;
+      let bestPlayerData = user; // fallback to login data
+
+      for (const endpoint of endpoints) {
+        try {
+          console.log(`\n🔍 Testing ${endpoint.name}...`);
+          
+          if (typeof pickleZoneAPI[endpoint.method] === 'function') {
+            const result = await pickleZoneAPI[endpoint.method]();
+            
+            if (result.success && result.player) {
+              console.log(`✅ ${endpoint.name} success!`);
+              console.log(`Data keys:`, Object.keys(result.player));
+              
+              const player = result.player;
+              
+              // Check for IC number in various possible field names
+              const icFields = ['ic', 'icNumber', 'nric', 'nricNumber', 'identityCard', 'nationalId', 'myKad', 'identification'];
+              for (const field of icFields) {
+                if (player[field]) {
+                  console.log(`🎯 FOUND IC NUMBER in ${field}:`, player[field]);
+                  foundICNumber = true;
+                }
+              }
+              
+              // Check for phone number in various possible field names
+              const phoneFields = ['phone', 'phoneNumber', 'mobile', 'mobileNumber', 'contact', 'contactNumber', 'tel', 'telephone', 'cellphone', 'handphone'];
+              for (const field of phoneFields) {
+                if (player[field]) {
+                  console.log(`📱 FOUND PHONE NUMBER in ${field}:`, player[field]);
+                  foundPhoneNumber = true;
+                }
+              }
+              
+              // Use the most complete data
+              if (Object.keys(player).length > Object.keys(bestPlayerData).length) {
+                bestPlayerData = player;
+                console.log(`📊 Using ${endpoint.name} as best data source`);
+              }
+              
+            } else {
+              console.log(`❌ ${endpoint.name} failed:`, result.message);
+            }
+          } else {
+            console.log(`⚠️ ${endpoint.method} method not available`);
+          }
+        } catch (error) {
+          console.log(`❌ ${endpoint.name} error:`, error.message);
+        }
+      }
+
+      // Set the best available profile data
+      setUserProfile(bestPlayerData);
+      
+      // Summary of findings
+      console.log('\n📋 SEARCH SUMMARY:');
+      console.log(`IC Number found: ${foundICNumber ? '✅' : '❌'}`);
+      console.log(`Phone Number found: ${foundPhoneNumber ? '✅' : '❌'}`);
+      
+      if (!foundICNumber && !foundPhoneNumber) {
+        console.log('⚠️ Neither IC Number nor Phone Number found in any endpoint');
+        console.log('Available fields in best data:', Object.keys(bestPlayerData));
+      }
+
+    } catch (error) {
+      console.error('Load user data error:', error);
       if (user) {
         setUserProfile(user);
       }
-    } catch (error) {
-      console.error('Load user data error:', error);
-      Alert.alert('Error', 'Failed to load user data');
     } finally {
       setIsLoading(false);
     }
@@ -115,9 +207,13 @@ const ProfileScreen = ({ onLogout, user, onNavigate }) => {
               style={styles.profileImageWrapper}
               onPress={handleUploadPhoto}
             >
-              {userProfile?.profilePictureUrl ? (
+              {userProfile?.profilePicture || userProfile?.profilePictureUrl ? (
                 <Image
-                  source={{ uri: userProfile.profilePictureUrl }}
+                  source={{ 
+                    uri: userProfile.profilePicture?.startsWith('http') 
+                      ? userProfile.profilePicture 
+                      : `https://www.malaysiapickleball.my${userProfile.profilePicture || userProfile.profilePictureUrl}`
+                  }}
                   style={styles.profileImage}
                 />
               ) : (
@@ -179,6 +275,18 @@ const ProfileScreen = ({ onLogout, user, onNavigate }) => {
           </View>
         </View>
 
+        {/* Debug Section - Remove this later */}
+        <View style={styles.infoCard}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Debug: Raw User Data</Text>
+          </View>
+          <View style={styles.cardContent}>
+            <Text style={styles.debugText}>
+              {JSON.stringify(userProfile, null, 2)}
+            </Text>
+          </View>
+        </View>
+
         {/* Personal Information Card */}
         <View style={styles.infoCard}>
           <View style={styles.cardHeader}>
@@ -186,6 +294,18 @@ const ProfileScreen = ({ onLogout, user, onNavigate }) => {
           </View>
           
           <View style={styles.cardContent}>
+            <View style={styles.infoRow}>
+              <View style={styles.infoIcon}>
+                <Text style={styles.iconText}>🆔</Text>
+              </View>
+              <View style={styles.infoDetails}>
+                <Text style={styles.infoLabel}>Player ID</Text>
+                <Text style={styles.infoValue}>
+                  {userProfile?.playerId || userProfile?.id || 'Not available'}
+                </Text>
+              </View>
+            </View>
+
             <View style={styles.infoRow}>
               <View style={styles.infoIcon}>
                 <Text style={styles.iconText}>👤</Text>
@@ -212,12 +332,36 @@ const ProfileScreen = ({ onLogout, user, onNavigate }) => {
 
             <View style={styles.infoRow}>
               <View style={styles.infoIcon}>
+                <Text style={styles.iconText}>🪪</Text>
+              </View>
+              <View style={styles.infoDetails}>
+                <Text style={styles.infoLabel}>IC Number</Text>
+                <Text style={styles.infoValue}>
+                  {userProfile?.icNumber || userProfile?.ic || userProfile?.nric || 'Not provided'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.infoRow}>
+              <View style={styles.infoIcon}>
                 <Text style={styles.iconText}>📱</Text>
               </View>
               <View style={styles.infoDetails}>
                 <Text style={styles.infoLabel}>Phone</Text>
                 <Text style={styles.infoValue}>
-                  {userProfile?.phone || 'Not provided'}
+                  {userProfile?.phone || userProfile?.phoneNumber || 'Not provided'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.infoRow}>
+              <View style={styles.infoIcon}>
+                <Text style={styles.iconText}>🏆</Text>
+              </View>
+              <View style={styles.infoDetails}>
+                <Text style={styles.infoLabel}>Skill Level</Text>
+                <Text style={styles.infoValue}>
+                  {userProfile?.skillLevel || userProfile?.level || 'Not specified'}
                 </Text>
               </View>
             </View>
@@ -549,6 +693,14 @@ const styles = StyleSheet.create({
   },
   bottomSpacing: {
     height: 40,
+  },
+  debugText: {
+    fontSize: 12,
+    fontFamily: 'monospace',
+    color: '#666',
+    backgroundColor: '#f5f5f5',
+    padding: 12,
+    borderRadius: 8,
   },
 });
 

@@ -5,6 +5,7 @@ import LoginScreen from './screens/LoginScreen';
 import InboxScreen from './screens/InboxScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import TournamentHistoryScreen from './screens/TournamentHistoryScreen';
+import { pickleZoneAPI } from './services/pickleZoneAPI';
 
 // Bottom Navigation Component
 const BottomNavigation = ({ currentScreen, onNavigate }) => {
@@ -66,9 +67,25 @@ export default function App() {
   };
 
   const handleLogin = (userData) => {
-    setUser(userData);
+    console.log('Login successful, full response:', userData);
+    
+    // Extract the actual player data from the nested structure
+    const playerData = userData.data?.player || userData.player || userData;
+    const accessToken = userData.data?.tokens?.accessToken || userData.tokens?.accessToken;
+    
+    console.log('Extracted player data:', playerData);
+    console.log('Extracted access token:', accessToken);
+    
+    // Store the clean player data
+    setUser(playerData);
     setIsLoggedIn(true);
-    setCurrentScreen('inbox'); // Always start at home after login
+    setCurrentScreen('inbox');
+    
+    // Store the access token in the API service
+    if (accessToken && pickleZoneAPI) {
+      pickleZoneAPI.token = accessToken;
+      console.log('Access token stored in API service');
+    }
   };
 
   const handleLogout = () => {
