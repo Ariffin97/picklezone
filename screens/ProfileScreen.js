@@ -10,6 +10,7 @@ import {
   RefreshControl,
   StatusBar,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { pickleZoneAPI } from '../services/pickleZoneAPI';
 
@@ -178,7 +179,7 @@ const ProfileScreen = ({ onLogout, user, onNavigate }) => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#007AFF" />
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       
       {/* Header with Gradient Background */}
       <View style={styles.header}>
@@ -249,44 +250,6 @@ const ProfileScreen = ({ onLogout, user, onNavigate }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Stats Cards */}
-        <View style={styles.statsSection}>
-          <View style={styles.statsGrid}>
-            <View style={styles.statCard}>
-              <Text style={styles.statNumber}>
-                {userProfile?.tournamentsPlayed || 0}
-              </Text>
-              <Text style={styles.statLabel}>Tournaments</Text>
-            </View>
-            
-            <View style={styles.statCard}>
-              <Text style={styles.statNumber}>
-                {userProfile?.ranking || 'Unranked'}
-              </Text>
-              <Text style={styles.statLabel}>Ranking</Text>
-            </View>
-            
-            <View style={styles.statCard}>
-              <Text style={styles.statNumber}>
-                {userProfile?.wins || 0}
-              </Text>
-              <Text style={styles.statLabel}>Wins</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Debug Section - Remove this later */}
-        <View style={styles.infoCard}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Debug: Raw User Data</Text>
-          </View>
-          <View style={styles.cardContent}>
-            <Text style={styles.debugText}>
-              {JSON.stringify(userProfile, null, 2)}
-            </Text>
-          </View>
-        </View>
-
         {/* Personal Information Card */}
         <View style={styles.infoCard}>
           <View style={styles.cardHeader}>
@@ -354,36 +317,7 @@ const ProfileScreen = ({ onLogout, user, onNavigate }) => {
               </View>
             </View>
 
-            <View style={styles.infoRow}>
-              <View style={styles.infoIcon}>
-                <Text style={styles.iconText}>🏆</Text>
-              </View>
-              <View style={styles.infoDetails}>
-                <Text style={styles.infoLabel}>Skill Level</Text>
-                <Text style={styles.infoValue}>
-                  {userProfile?.skillLevel || userProfile?.level || 'Not specified'}
-                </Text>
-              </View>
-            </View>
 
-            <View style={styles.infoRow}>
-              <View style={styles.infoIcon}>
-                <Text style={styles.iconText}>📅</Text>
-              </View>
-              <View style={styles.infoDetails}>
-                <Text style={styles.infoLabel}>Member Since</Text>
-                <Text style={styles.infoValue}>
-                  {userProfile?.createdAt ? 
-                    new Date(userProfile.createdAt).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    }) : 
-                    'Recently joined'
-                  }
-                </Text>
-              </View>
-            </View>
           </View>
         </View>
 
@@ -453,14 +387,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f9fa',
   },
   header: {
-    backgroundColor: '#007AFF',
-    paddingTop: 50,
+    backgroundColor: '#ffffff',
+    paddingTop: Platform.OS === 'ios' ? 60 : 30,
     paddingBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 5,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
   },
   headerContent: {
     flexDirection: 'row',
@@ -469,7 +405,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   headerTitle: {
-    color: '#fff',
+    color: '#1a1a1a',
     fontSize: 20,
     fontWeight: '600',
   },
@@ -477,10 +413,10 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#f0f0f0',
   },
   headerButtonText: {
-    color: '#fff',
+    color: '#007AFF',
     fontSize: 14,
     fontWeight: '500',
   },
@@ -577,40 +513,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  statsSection: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  statCard: {
-    backgroundColor: '#fff',
-    flex: 1,
-    marginHorizontal: 4,
-    paddingVertical: 20,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#007AFF',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '500',
-    textAlign: 'center',
-  },
   infoCard: {
     backgroundColor: '#fff',
     marginHorizontal: 20,
@@ -693,14 +595,6 @@ const styles = StyleSheet.create({
   },
   bottomSpacing: {
     height: 40,
-  },
-  debugText: {
-    fontSize: 12,
-    fontFamily: 'monospace',
-    color: '#666',
-    backgroundColor: '#f5f5f5',
-    padding: 12,
-    borderRadius: 8,
   },
 });
 

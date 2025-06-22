@@ -10,6 +10,8 @@ import {
   RefreshControl,
   ActivityIndicator,
   Image,
+  Platform,
+  Alert,
 } from 'react-native';
 import { pickleZoneAPI } from '../services/pickleZoneAPI';
 import { cacheService } from '../services/cacheService';
@@ -17,7 +19,7 @@ import { cacheService } from '../services/cacheService';
 const InboxScreen = ({ user, onNavigate, onRefresh, lastRefresh }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeCategory, setActiveCategory] = useState('all');
+  const [activeCategory, setActiveCategory] = useState('system');
   const [loading, setLoading] = useState(false);
   const [tournaments, setTournaments] = useState([]);
   const [upcomingTournaments, setUpcomingTournaments] = useState([]);
@@ -33,19 +35,37 @@ const InboxScreen = ({ user, onNavigate, onRefresh, lastRefresh }) => {
     try {
       setLoading(true);
       
-      // Load tournaments with caching
-      const tournamentsResult = await pickleZoneAPI.getTournaments();
+      // Force refresh tournaments to bypass cache issues
+      console.log('🔄 Force refreshing tournaments to bypass cache...');
+      const tournamentsResult = await pickleZoneAPI.getTournaments(true);
+      console.log('🏆 Raw tournaments result:', tournamentsResult);
       if (tournamentsResult.success) {
-        setTournaments(tournamentsResult.data || []);
-        setDataFromCache(tournamentsResult.fromCache || false);
-        console.log('🏆 Tournaments loaded:', tournamentsResult.data?.length || 0, 'items');
+        const tournamentData = tournamentsResult.data || [];
+        console.log('🏆 Tournament data type:', typeof tournamentData, 'isArray:', Array.isArray(tournamentData));
+        console.log('🏆 Tournament data count:', tournamentData.length);
+        console.log('🏆 First 3 tournaments:', tournamentData.slice(0, 3).map(t => t.name));
+        setTournaments(Array.isArray(tournamentData) ? tournamentData : []);
+        setDataFromCache(false); // Always fresh data
+        console.log('🏆 Tournaments loaded:', tournamentData?.length || 0, 'items');
+      } else {
+        console.log('❌ Tournaments load failed:', tournamentsResult.message);
+        setTournaments([]);
       }
       
-      // Load upcoming tournaments with caching
-      const upcomingResult = await pickleZoneAPI.getUpcomingTournaments();
+      // Force refresh upcoming tournaments to bypass cache issues
+      console.log('🔄 Force refreshing upcoming tournaments to bypass cache...');
+      const upcomingResult = await pickleZoneAPI.getUpcomingTournaments(true);
+      console.log('📅 Raw upcoming result:', upcomingResult);
       if (upcomingResult.success) {
-        setUpcomingTournaments(upcomingResult.data || []);
-        console.log('📅 Upcoming tournaments loaded:', upcomingResult.data?.length || 0, 'items');
+        const upcomingData = upcomingResult.data || [];
+        console.log('📅 Upcoming data type:', typeof upcomingData, 'isArray:', Array.isArray(upcomingData));
+        console.log('📅 Upcoming data count:', upcomingData.length);
+        console.log('📅 First 3 upcoming tournaments:', upcomingData.slice(0, 3).map(t => t.name));
+        setUpcomingTournaments(Array.isArray(upcomingData) ? upcomingData : []);
+        console.log('📅 Upcoming tournaments loaded:', upcomingData?.length || 0, 'items');
+      } else {
+        console.log('❌ Upcoming tournaments load failed:', upcomingResult.message);
+        setUpcomingTournaments([]);
       }
       
     } catch (error) {
@@ -103,6 +123,10 @@ const InboxScreen = ({ user, onNavigate, onRefresh, lastRefresh }) => {
     }
   };
 
+  const handleQRScanner = () => {
+    Alert.alert('QR Scanner', 'QR code scanner will be available soon!');
+  };
+
   const getUserDisplayName = () => {
     return user?.fullName || user?.username || 'Player';
   };
@@ -137,8 +161,9 @@ const InboxScreen = ({ user, onNavigate, onRefresh, lastRefresh }) => {
   const getTournamentMessages = () => {
     const messages = [];
     
-    // Add tournament messages
-    tournaments.slice(0, 3).forEach((tournament, index) => {
+    // Add tournament messages (ensure tournaments is an array)
+    const tournamentsArray = Array.isArray(tournaments) ? tournaments : [];
+    tournamentsArray.slice(0, 3).forEach((tournament, index) => {
       messages.push({
         id: `tournament-${tournament.id || tournament._id || index}`,
         type: 'tournament',
@@ -149,8 +174,9 @@ const InboxScreen = ({ user, onNavigate, onRefresh, lastRefresh }) => {
       });
     });
     
-    // Add upcoming tournament messages
-    upcomingTournaments.slice(0, 2).forEach((tournament, index) => {
+    // Add upcoming tournament messages (ensure upcomingTournaments is an array)
+    const upcomingArray = Array.isArray(upcomingTournaments) ? upcomingTournaments : [];
+    upcomingArray.slice(0, 2).forEach((tournament, index) => {
       messages.push({
         id: `upcoming-${tournament.id || tournament._id || index}`,
         type: 'tournament',
@@ -250,7 +276,7 @@ const InboxScreen = ({ user, onNavigate, onRefresh, lastRefresh }) => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#007AFF" />
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       
       {/* Header */}
       <View style={styles.header}>
@@ -263,31 +289,51 @@ const InboxScreen = ({ user, onNavigate, onRefresh, lastRefresh }) => {
               <Text style={styles.cacheIndicator}>📦 Using cached data</Text>
             )}
           </View>
-          <TouchableOpacity 
-            style={styles.profileButton}
-            onPress={handleProfilePress}
-            activeOpacity={0.8}
-          >
-            <View style={styles.profileAvatar}>
-              {getProfileImageUrl() ? (
-                <Image 
-                  source={{ uri: getProfileImageUrl() }}
-                  style={styles.profileImage}
-                  onError={(error) => {
-                    console.log('📸 Profile image failed to load:', getProfileImageUrl());
-                  }}
-                  onLoad={() => {
-                    console.log('📸 Profile image loaded successfully:', getProfileImageUrl());
-                  }}
-                />
-              ) : (
-                <Text style={styles.profileAvatarText}>
-                  {getProfileInitials()}
-                </Text>
-              )}
-              <View style={styles.onlineIndicator} />
-            </View>
-          </TouchableOpacity>
+          <View style={styles.headerRightSection}>
+            {/* QR Scanner Button */}
+            <TouchableOpacity 
+              style={styles.qrScannerButton}
+              onPress={handleQRScanner}
+              activeOpacity={0.7}
+            >
+              <View style={styles.qrScannerIcon}>
+                <View style={styles.scannerFrame}>
+                  <View style={styles.cornerTopLeft} />
+                  <View style={styles.cornerTopRight} />
+                  <View style={styles.cornerBottomLeft} />
+                  <View style={styles.cornerBottomRight} />
+                  <View style={styles.scanLine} />
+                </View>
+              </View>
+            </TouchableOpacity>
+            
+            {/* Profile Avatar */}
+            <TouchableOpacity 
+              style={styles.profileButton}
+              onPress={handleProfilePress}
+              activeOpacity={0.8}
+            >
+              <View style={styles.profileAvatar}>
+                {getProfileImageUrl() ? (
+                  <Image 
+                    source={{ uri: getProfileImageUrl() }}
+                    style={styles.profileImage}
+                    onError={(error) => {
+                      console.log('📸 Profile image failed to load:', getProfileImageUrl());
+                    }}
+                    onLoad={() => {
+                      console.log('📸 Profile image loaded successfully:', getProfileImageUrl());
+                    }}
+                  />
+                ) : (
+                  <Text style={styles.profileAvatarText}>
+                    {getProfileInitials()}
+                  </Text>
+                )}
+                <View style={styles.onlineIndicator} />
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -297,7 +343,7 @@ const InboxScreen = ({ user, onNavigate, onRefresh, lastRefresh }) => {
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
             style={styles.searchInput}
-            placeholder="Search messages and tournaments..."
+            placeholder="Search inbox and tournaments..."
             placeholderTextColor="#999"
             value={searchQuery}
             onChangeText={handleSearch}
@@ -344,24 +390,8 @@ const InboxScreen = ({ user, onNavigate, onRefresh, lastRefresh }) => {
 
         {/* Message Categories */}
         <View style={styles.categoriesSection}>
-          <Text style={styles.sectionTitle}>Messages</Text>
+          <Text style={styles.sectionTitle}>Inbox</Text>
           <View style={styles.categoriesContainer}>
-            <TouchableOpacity 
-              style={[styles.categoryButton, activeCategory === 'all' && styles.activeCategory]}
-              onPress={() => handleCategoryPress('all')}
-            >
-              <Text style={[styles.categoryText, activeCategory === 'all' && styles.activeCategoryText]}>
-                All
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.categoryButton, activeCategory === 'tournaments' && styles.activeCategory]}
-              onPress={() => handleCategoryPress('tournaments')}
-            >
-              <Text style={[styles.categoryText, activeCategory === 'tournaments' && styles.activeCategoryText]}>
-                Tournaments
-              </Text>
-            </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.categoryButton, activeCategory === 'system' && styles.activeCategory]}
               onPress={() => handleCategoryPress('system')}
@@ -373,12 +403,12 @@ const InboxScreen = ({ user, onNavigate, onRefresh, lastRefresh }) => {
           </View>
         </View>
 
-        {/* Messages List */}
+        {/* Inbox List */}
         <View style={styles.messagesSection}>
           {loading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#007AFF" />
-              <Text style={styles.loadingText}>Loading messages...</Text>
+              <Text style={styles.loadingText}>Loading inbox...</Text>
             </View>
           ) : getFilteredMessages().length > 0 ? (
             getFilteredMessages().map(renderMessage)
@@ -386,12 +416,12 @@ const InboxScreen = ({ user, onNavigate, onRefresh, lastRefresh }) => {
             <View style={styles.emptyStateCard}>
               <Text style={styles.emptyStateIcon}>📬</Text>
               <Text style={styles.emptyStateTitle}>
-                {searchQuery ? 'No matching messages found' : 'You\'re All Caught Up!'}
+                {searchQuery ? 'No matching items found' : 'You\'re All Caught Up!'}
               </Text>
               <Text style={styles.emptyStateText}>
                 {searchQuery 
                   ? 'Try adjusting your search terms or check different categories'
-                  : 'New tournament updates and messages will appear here'
+                  : 'New tournament updates and notifications will appear here'
                 }
               </Text>
             </View>
@@ -410,14 +440,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f9fa',
   },
   header: {
-    backgroundColor: '#007AFF',
-    paddingTop: 50,
+    backgroundColor: '#ffffff',
+    paddingTop: Platform.OS === 'ios' ? 60 : 30,
     paddingBottom: 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 5,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
   },
   headerContent: {
     flexDirection: 'row',
@@ -429,26 +461,107 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   greetingText: {
-    color: 'rgba(255,255,255,0.9)',
+    color: '#666',
     fontSize: 16,
     fontWeight: '500',
     marginBottom: 2,
   },
   userNameText: {
-    color: '#fff',
+    color: '#1a1a1a',
     fontSize: 22,
     fontWeight: '700',
     marginBottom: 4,
   },
   headerSubtitle: {
-    color: 'rgba(255,255,255,0.8)',
+    color: '#666',
     fontSize: 14,
     fontWeight: '400',
   },
   cacheIndicator: {
-    color: 'rgba(255,255,255,0.7)',
+    color: '#999',
     fontSize: 12,
     marginTop: 2,
+  },
+  headerRightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  qrScannerButton: {
+    marginRight: 12,
+    padding: 4,
+  },
+  qrScannerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f0f8ff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#e0e0e0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  qrScannerIconText: {
+    fontSize: 18,
+    color: '#007AFF',
+  },
+  scannerFrame: {
+    width: 20,
+    height: 20,
+    position: 'relative',
+  },
+  cornerTopLeft: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 6,
+    height: 6,
+    borderTopWidth: 2,
+    borderLeftWidth: 2,
+    borderColor: '#007AFF',
+  },
+  cornerTopRight: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 6,
+    height: 6,
+    borderTopWidth: 2,
+    borderRightWidth: 2,
+    borderColor: '#007AFF',
+  },
+  cornerBottomLeft: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    width: 6,
+    height: 6,
+    borderBottomWidth: 2,
+    borderLeftWidth: 2,
+    borderColor: '#007AFF',
+  },
+  cornerBottomRight: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 6,
+    height: 6,
+    borderBottomWidth: 2,
+    borderRightWidth: 2,
+    borderColor: '#007AFF',
+  },
+  scanLine: {
+    position: 'absolute',
+    top: 9,
+    left: 2,
+    right: 2,
+    height: 2,
+    backgroundColor: '#007AFF',
+    opacity: 0.7,
   },
   profileButton: {
     padding: 4,
@@ -457,11 +570,11 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#f0f8ff',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: '#e0e0e0',
     position: 'relative',
   },
   profileImage: {
@@ -470,7 +583,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
   },
   profileAvatarText: {
-    color: '#fff',
+    color: '#007AFF',
     fontSize: 18,
     fontWeight: '700',
   },
@@ -483,7 +596,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: '#4CAF50',
     borderWidth: 2,
-    borderColor: '#007AFF',
+    borderColor: '#ffffff',
   },
   searchContainer: {
     backgroundColor: '#fff',

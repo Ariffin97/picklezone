@@ -10,6 +10,7 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import pickleZoneAPI from '../services/pickleZoneAPI';
 
@@ -36,12 +37,27 @@ const TournamentHistoryScreen = ({ user, onNavigate }) => {
     try {
       setLoading(true);
       
-      const allResult = await pickleZoneAPI.getTournaments();
-      const upcomingResult = await pickleZoneAPI.getUpcomingTournaments();
+      // Force refresh to get latest data from your API
+      console.log('🏆 Loading tournaments for tournament page...');
+      const allResult = await pickleZoneAPI.getTournaments(true);
+      const upcomingResult = await pickleZoneAPI.getUpcomingTournaments(true);
 
-      // Ensure we always set arrays
-      setAllTournaments(allResult.success && Array.isArray(allResult.tournaments) ? allResult.tournaments : []);
-      setUpcomingTournaments(upcomingResult.success && Array.isArray(upcomingResult.tournaments) ? upcomingResult.tournaments : []);
+      console.log('🏆 All tournaments result:', allResult);
+      console.log('📅 Upcoming tournaments result:', upcomingResult);
+
+      // Fix: Access .data instead of .tournaments
+      const allTournamentsData = allResult.success && Array.isArray(allResult.data) ? allResult.data : [];
+      const upcomingTournamentsData = upcomingResult.success && Array.isArray(upcomingResult.data) ? upcomingResult.data : [];
+
+      // Filter out null/undefined tournaments and ensure they have IDs
+      const cleanAllTournaments = allTournamentsData.filter(t => t && (t._id || t.id));
+      const cleanUpcomingTournaments = upcomingTournamentsData.filter(t => t && (t._id || t.id));
+
+      console.log('🏆 All tournaments count:', allTournamentsData.length, '→ cleaned:', cleanAllTournaments.length);
+      console.log('📅 Upcoming tournaments count:', upcomingTournamentsData.length, '→ cleaned:', cleanUpcomingTournaments.length);
+
+      setAllTournaments(cleanAllTournaments);
+      setUpcomingTournaments(cleanUpcomingTournaments);
 
     } catch (error) {
       console.error('Error loading tournaments:', error);
@@ -71,16 +87,61 @@ const TournamentHistoryScreen = ({ user, onNavigate }) => {
         tournaments = [...upcoming];
         break;
       case 'all':
-        tournaments = [...upcoming, ...all];
+        // Combine and remove duplicates based on _id
+        const combined = [...upcoming, ...all];
+        
+        const seen = new Set();
+        tournaments = combined.filter(t => {
+          if (!t) return false;
+          
+          const tournamentId = t._id || t.id;
+          if (!tournamentId) return true; // Keep tournaments without IDs but they won't be deduplicated
+          
+          if (seen.has(tournamentId)) return false;
+          seen.add(tournamentId);
+          return true;
+        });
         break;
       case 'open':
-        tournaments = [...upcoming, ...all].filter(t => t && t.registrationOpen === true);
+        // Combine and remove duplicates, then filter for open registration
+        const combinedOpen = [...upcoming, ...all];
+        const seenOpen = new Set();
+        const uniqueOpen = combinedOpen.filter(t => {
+          if (!t) return false;
+          const tournamentId = t._id || t.id;
+          if (!tournamentId) return true;
+          if (seenOpen.has(tournamentId)) return false;
+          seenOpen.add(tournamentId);
+          return true;
+        });
+        tournaments = uniqueOpen.filter(t => t && t.registrationOpen === true);
         break;
       case 'closed':
-        tournaments = [...upcoming, ...all].filter(t => t && t.registrationOpen === false);
+        // Combine and remove duplicates, then filter for closed registration
+        const combinedClosed = [...upcoming, ...all];
+        const seenClosed = new Set();
+        const uniqueClosed = combinedClosed.filter(t => {
+          if (!t) return false;
+          const tournamentId = t._id || t.id;
+          if (!tournamentId) return true;
+          if (seenClosed.has(tournamentId)) return false;
+          seenClosed.add(tournamentId);
+          return true;
+        });
+        tournaments = uniqueClosed.filter(t => t && t.registrationOpen === false);
         break;
       default:
-        tournaments = [...upcoming, ...all];
+        // Default to all with duplicates removed
+        const defaultCombined = [...upcoming, ...all];
+        const seenDefault = new Set();
+        tournaments = defaultCombined.filter(t => {
+          if (!t) return false;
+          const tournamentId = t._id || t.id;
+          if (!tournamentId) return true;
+          if (seenDefault.has(tournamentId)) return false;
+          seenDefault.add(tournamentId);
+          return true;
+        });
     }
 
     // Apply search filter
@@ -176,7 +237,7 @@ const TournamentHistoryScreen = ({ user, onNavigate }) => {
 
     return (
       <TouchableOpacity 
-        key={tournament.id || tournament._id || index}
+        key={`${activeFilter}-${tournament._id || tournament.id || index}`}
         style={styles.tournamentCard}
         onPress={() => handleTournamentPress(tournament)}
         activeOpacity={0.7}
@@ -239,17 +300,43 @@ const TournamentHistoryScreen = ({ user, onNavigate }) => {
     );
   };
 
-  // Safe counting functions
+  // Safe counting functions with duplicate removal
   const getTotalCount = () => {
-    const upcomingCount = Array.isArray(upcomingTournaments) ? upcomingTournaments.length : 0;
-    const allCount = Array.isArray(allTournaments) ? allTournaments.length : 0;
-    return upcomingCount + allCount;
+    const upcoming = Array.isArray(upcomingTournaments) ? upcomingTournaments : [];
+    const all = Array.isArray(allTournaments) ? allTournaments : [];
+    
+    // Combine and remove duplicates using the same logic as display
+    const combined = [...upcoming, ...all];
+    const seen = new Set();
+    const unique = combined.filter(t => {
+      if (!t) return false;
+      const tournamentId = t._id || t.id;
+      if (!tournamentId) return true;
+      if (seen.has(tournamentId)) return false;
+      seen.add(tournamentId);
+      return true;
+    });
+    
+    return unique.length;
   };
 
   const getOpenCount = () => {
     const upcoming = Array.isArray(upcomingTournaments) ? upcomingTournaments : [];
     const all = Array.isArray(allTournaments) ? allTournaments : [];
-    return [...upcoming, ...all].filter(t => t && t.registrationOpen).length;
+    
+    // Combine and remove duplicates using the same logic as display
+    const combined = [...upcoming, ...all];
+    const seen = new Set();
+    const unique = combined.filter(t => {
+      if (!t) return false;
+      const tournamentId = t._id || t.id;
+      if (!tournamentId) return true;
+      if (seen.has(tournamentId)) return false;
+      seen.add(tournamentId);
+      return true;
+    });
+    
+    return unique.filter(t => t && t.registrationOpen).length;
   };
 
   const getUpcomingCount = () => {
@@ -262,7 +349,7 @@ const TournamentHistoryScreen = ({ user, onNavigate }) => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#007AFF" />
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       
       {/* Header */}
       <View style={styles.header}>
@@ -308,7 +395,7 @@ const TournamentHistoryScreen = ({ user, onNavigate }) => {
           <Text style={styles.sectionTitle}>Tournament Overview</Text>
           <View style={styles.statsContainer}>
             <View style={styles.statCard}>
-              <Text style={styles.statNumber}>{getAllCount()}</Text>
+              <Text style={styles.statNumber}>{getTotalCount()}</Text>
               <Text style={styles.statLabel}>Total</Text>
             </View>
             <View style={styles.statCard}>
@@ -414,26 +501,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f9fa',
   },
   header: {
-    backgroundColor: '#007AFF',
-    paddingTop: 50,
+    backgroundColor: '#ffffff',
+    paddingTop: Platform.OS === 'ios' ? 60 : 30,
     paddingBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 5,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
   },
   headerContent: {
     paddingHorizontal: 20,
   },
   headerTitle: {
-    color: '#fff',
+    color: '#1a1a1a',
     fontSize: 28,
     fontWeight: '700',
     marginBottom: 4,
   },
   headerSubtitleText: {
-    color: '#fff',
+    color: '#666',
     fontSize: 16,
     opacity: 0.9,
   },

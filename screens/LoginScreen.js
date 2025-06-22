@@ -29,14 +29,16 @@ const LoginScreen = ({ onLogin }) => {
     setError('');
 
     try {
-      const result = await pickleZoneAPI.login({ 
-        username: username.trim(), 
-        password: password.trim() 
-      });
+      const result = await pickleZoneAPI.login(
+        username.trim(), 
+        password.trim() 
+      );
 
       if (result.success) {
         // Login successful
-        onLogin(result.user);
+        console.log('Login successful, full response:', result);
+        const userData = result.data?.player || result.data || result.user;
+        onLogin(userData);
       } else {
         // Login failed
         setError(result.message);

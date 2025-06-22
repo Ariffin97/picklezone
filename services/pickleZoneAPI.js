@@ -101,23 +101,33 @@ class PickleZoneAPI {
 
       const data = await response.json();
       console.log('✅ Login response:', data);
+      console.log('✅ Login response keys:', Object.keys(data || {}));
 
-      if (data.success && data.data) {
-        // Store tokens
-        this.token = data.data.tokens?.accessToken;
-        this.refreshToken = data.data.tokens?.refreshToken;
+      // Handle different possible response structures
+      if (data.success) {
+        const responseData = data.data || data;
+        const player = responseData.player || responseData.user || responseData;
+        const tokens = responseData.tokens || {};
         
-        // Cache user session
-        await cacheService.saveUserSession(data.data.player, data.data.tokens);
+        // Store tokens if available
+        this.token = tokens.accessToken || tokens.token;
+        this.refreshToken = tokens.refreshToken;
         
-        // Cache user profile
-        await cacheService.saveUserProfile(data.data.player);
-        
-        console.log('💾 User session and profile cached');
+        // Cache user session if cacheService is available
+        try {
+          await cacheService.saveUserSession(player, tokens);
+          await cacheService.saveUserProfile(player);
+          console.log('💾 User session and profile cached');
+        } catch (cacheError) {
+          console.log('⚠️ Cache error (non-critical):', cacheError.message);
+        }
         
         return {
           success: true,
-          data: data.data
+          data: {
+            player: player,
+            tokens: tokens
+          }
         };
       }
 
@@ -134,17 +144,45 @@ class PickleZoneAPI {
       cacheService.CACHE_KEYS.TOURNAMENTS,
       async () => {
         try {
+          console.log('🌐 Fetching tournaments from:', `${this.baseURL}/tournaments`);
           const response = await fetch(`${this.baseURL}/tournaments`);
+          console.log('📥 Tournaments response status:', response.status);
+          
           if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const errorText = await response.text();
+            console.log('❌ Tournaments API error response:', errorText);
+            throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
           }
+          
           const data = await response.json();
+          console.log('✅ Raw tournaments API response:', data);
+          console.log('✅ Response keys:', Object.keys(data || {}));
           
           await cacheService.updateLastSync('tournaments');
           
+          // Handle the actual response structure from your API
+          let tournaments = [];
+          if (data.success && data.data && data.data.tournaments) {
+            tournaments = data.data.tournaments;
+          } else if (data.tournaments) {
+            tournaments = data.tournaments;
+          } else if (Array.isArray(data)) {
+            tournaments = data;
+          } else if (data.data && Array.isArray(data.data)) {
+            tournaments = data.data;
+          }
+          
+          // Ensure tournaments is always an array
+          if (!Array.isArray(tournaments)) {
+            tournaments = [];
+          }
+          
+          console.log('🏆 Processed tournaments:', tournaments);
+          console.log('🏆 Tournament count:', tournaments.length);
+          
           return {
             success: true,
-            data: data.tournaments || data
+            data: tournaments
           };
         } catch (error) {
           console.error('❌ Tournaments fetch error:', error);
@@ -160,17 +198,43 @@ class PickleZoneAPI {
       cacheService.CACHE_KEYS.UPCOMING_TOURNAMENTS,
       async () => {
         try {
+          console.log('🌐 Fetching upcoming tournaments from:', `${this.baseURL}/tournaments/upcoming`);
           const response = await fetch(`${this.baseURL}/tournaments/upcoming`);
+          console.log('📥 Upcoming tournaments response status:', response.status);
+          
           if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const errorText = await response.text();
+            console.log('❌ Upcoming tournaments API error response:', errorText);
+            throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
           }
+          
           const data = await response.json();
+          console.log('✅ Raw upcoming tournaments API response:', data);
+          console.log('✅ Upcoming response keys:', Object.keys(data || {}));
           
           await cacheService.updateLastSync('upcoming_tournaments');
           
+          // Handle the actual response structure from your API
+          let tournaments = [];
+          if (data.success && Array.isArray(data.data)) {
+            tournaments = data.data;
+          } else if (data.tournaments) {
+            tournaments = data.tournaments;
+          } else if (Array.isArray(data)) {
+            tournaments = data;
+          }
+          
+          // Ensure tournaments is always an array
+          if (!Array.isArray(tournaments)) {
+            tournaments = [];
+          }
+          
+          console.log('📅 Processed upcoming tournaments:', tournaments);
+          console.log('📅 Upcoming tournament count:', tournaments.length);
+          
           return {
             success: true,
-            data: data.tournaments || data
+            data: tournaments
           };
         } catch (error) {
           console.error('❌ Upcoming tournaments fetch error:', error);
